@@ -1,0 +1,136 @@
+*ProjectParse.txt*
+==============================================================================
+  ProjectParse                                                  *ProjectParse*
+==============================================================================
+
+Author:     Dan Price   vim@danprice.fastmail.net      *ProjectParse_Author*
+
+Goal:                                                  |ProjectParse_Motivation|
+Version:    1.0                                        |ProjectParse_History|
+
+License:    Public domain, no restrictions whatsoever  |ProjectParse_License|
+Contribute: Please report any bugs or suggestions      |ProjectParse_Bugs|
+            to the address above.                      |ProjectParse_Future|
+
+
+==============================================================================
+  Table of Contents                                    *ProjectParse_Contents*
+==============================================================================
+
+
+             1. Motivation.................|ProjectParse_Motivation|
+             2. Commands...................|ProjectParse_Commands|
+             3. Bugs.......................|ProjectParse_Bugs|
+             4. Future.....................|ProjectParse_Future|
+             5. History....................|ProjectParse_History|
+             6. License....................|ProjectParse_License|
+
+
+==============================================================================
+  Motivation                                         *ProjectParse_Motivation*
+==============================================================================
+
+ProjectParse is a plugin that analyzes several common project formats and
+creates entries for them for use with  Vim's `project` plugin.  ProjectParse
+currently supports the following project types:
+
+    * Microsoft Visual Studio Projects and Solutions
+    * Code::Blocks Projects and Workspaces
+    * Automake Makefiles
+
+One of the most popular plugins available for Vim, the `project` plugin
+provides a mechanism for creating lists of files that makeup a project.
+Beyond just giving you a file listing, it provides some great functionality
+such as automatically opening your project files, grepping through each file
+in the list, and running arbitrary commands on these files.  
+
+              http://www.vim.org/scripts/script.php?script_id=69
+
+The project plugin creates a project by scanning through the user's filesystem
+for files that match a specified pattern.  This approach, while effective for
+some projects, isn't optimal for others.  Often, the filesystem may contain
+files that match the specified pattern but are not a part of the project (such
+as temporary files or older revisions of relevant files).  Also, when the
+user's filesystem is large, generating the list of files can be quite
+time-consuming (I've had projects with 1,500 relevant files in a directory of
+30,000 files, where >28,000 files are analyzed unnecessarily).  Another
+problem is that by relying on a pre-configured file pattern, certain important
+files can be missed when they are not part of the configured pattern,
+especially as projects evolve.
+
+Often, software developers already have a list of their relevant files in the
+form of a project for a well-known software tool like Microsoft Visual Studio.
+This is where ProjectParse enters.  ProjectParse is capable of analyzing
+project files for several popular software tools to automatically (and
+quickly) create a project for the `project` plugin.
+
+By simply running the :ProjectParse command on a relevant file, a file listing
+will be added to a user's configuration for the `project` plugin and he or she
+can need not worry about whether any files have been missed (or added in
+error).
+
+I hope you find ProjectParse useful.  In the future I would like to see other
+project types supported and any contributions towards this goal are very much
+appreciated!
+
+                                Happy Vimming!
+
+
+==============================================================================
+  Commands                                             *ProjectParse_Commands*
+==============================================================================
+
+:ProjectParse [arg]
+    Parses the specified project or solution file for files associated with
+    it and adds these as a project to the user's .vimproject file.
+
+==============================================================================
+  Future                                                 *ProjectParse_Future*
+==============================================================================
+
+------------------------------------------------------------------------------
+Parse additional project filetypes
+    * build.xml
+    * Makefile
+    * Sconscript
+    * Kdevelop
+------------------------------------------------------------------------------
+
+
+==============================================================================
+  Bugs                                                     *ProjectParse_Bugs*
+==============================================================================
+
+If you discover any bugs not listed here, please contact the
+|ProjectParse_Author|
+
+
+==============================================================================
+  History                                               *ProjectParse_History*
+==============================================================================
+
+  1.0
+      Initial version
+
+
+==============================================================================
+  License                                               *ProjectParse_License*
+==============================================================================
+
+                  Public domain, no restrictions whatsoever
+
+When writing ProjectParse, I wanted it to be free in the broadest sense.  Of
+course, most (if not all) plugins for Vim are free, but I wanted mine to be
+freer still: I've released ProjectParse in the public domain.  It took a lot
+of time and learning to get ProjectParse to work, and I want anyone to take
+advantage of my contribution.  If you see some (or many) snippets of
+ProjectParse's code that you need, use it -- you don't need to ask me, think
+about any copyright, worry about violating a license, or even note that the
+code came from me, just use it.  My only request is that if you are thinking
+of forking ProjectParse (or enhancing, as some authors claim to do), please
+contact me to let me know what you feel is lacking in ProjectParse, and I
+promise I'll be receptive to correcting these issues.
+
+
+==============================================================================
+vim:tw=78:ts=4:ft=help:norl:fdm=marker
