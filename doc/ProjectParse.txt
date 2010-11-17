@@ -6,7 +6,7 @@
 Author:     Dan Price   vim@danprice.fastmail.net      *ProjectParse_Author*
 
 Goal:                                                  |ProjectParse_Motivation|
-Version:    1.0                                        |ProjectParse_History|
+Version:    1.1                                        |ProjectParse_History|
 
 License:    Public domain, no restrictions whatsoever  |ProjectParse_License|
 Contribute: Please report any bugs or suggestions      |ProjectParse_Bugs|
@@ -20,10 +20,11 @@ Contribute: Please report any bugs or suggestions      |ProjectParse_Bugs|
 
              1. Motivation.................|ProjectParse_Motivation|
              2. Commands...................|ProjectParse_Commands|
-             3. Bugs.......................|ProjectParse_Bugs|
+             3. Options....................|ProjectParse_Options|
              4. Future.....................|ProjectParse_Future|
-             5. History....................|ProjectParse_History|
-             6. License....................|ProjectParse_License|
+             5. Bugs.......................|ProjectParse_Bugs|
+             6. History....................|ProjectParse_History|
+             7. License....................|ProjectParse_License|
 
 
 ==============================================================================
@@ -37,6 +38,8 @@ currently supports the following project types:
     * Microsoft Visual Studio Projects and Solutions
     * Code::Blocks Projects and Workspaces
     * Automake Makefiles
+    * MPLAB Projects
+    * CodeLite Projects
 
 One of the most popular plugins available for Vim, the `project` plugin
 provides a mechanism for creating lists of files that makeup a project.
@@ -84,6 +87,20 @@ appreciated!
     Parses the specified project or solution file for files associated with
     it and adds these as a project to the user's .vimproject file.
 
+:ProjectUpdate
+    Scans the project list for files that are out of date and re-generates
+    entries for them
+
+==============================================================================
+  Options                                               *ProjectParse_Options*
+==============================================================================
+
+ Option                               Description
+------------------------------------------------------------------------------
+*ProjectParseNoAutoUpdate*            Specifies that automatically updating
+                                    projects upon startup is ignored
+------------------------------------------------------------------------------
+
 ==============================================================================
   Future                                                 *ProjectParse_Future*
 ==============================================================================
@@ -94,6 +111,11 @@ Parse additional project filetypes
     * Makefile
     * Sconscript
     * Kdevelop
+------------------------------------------------------------------------------
+Autorefresh upon project change.  Consider storing a list of the projects and
+mtimes and checking the mtime of each of these on some regular interval.
+------------------------------------------------------------------------------
+Hide certain characteristics such as mtime in the project files
 ------------------------------------------------------------------------------
 
 
@@ -109,6 +131,12 @@ If you discover any bugs not listed here, please contact the
   History                                               *ProjectParse_History*
 ==============================================================================
 
+  1.1
+      Added automatic update of projects upon a change to the project file.
+          - Projects will need to be reparsed to support this functionality
+      Added support for CodeLite projects
+      Added support for MPLAB projects
+      Improved other parsers
   1.0
       Initial version
 
@@ -118,19 +146,6 @@ If you discover any bugs not listed here, please contact the
 ==============================================================================
 
                   Public domain, no restrictions whatsoever
-
-When writing ProjectParse, I wanted it to be free in the broadest sense.  Of
-course, most (if not all) plugins for Vim are free, but I wanted mine to be
-freer still: I've released ProjectParse in the public domain.  It took a lot
-of time and learning to get ProjectParse to work, and I want anyone to take
-advantage of my contribution.  If you see some (or many) snippets of
-ProjectParse's code that you need, use it -- you don't need to ask me, think
-about any copyright, worry about violating a license, or even note that the
-code came from me, just use it.  My only request is that if you are thinking
-of forking ProjectParse (or enhancing, as some authors claim to do), please
-contact me to let me know what you feel is lacking in ProjectParse, and I
-promise I'll be receptive to correcting these issues.
-
 
 ==============================================================================
 vim:tw=78:ts=4:ft=help:norl:fdm=marker

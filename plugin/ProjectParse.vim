@@ -4,16 +4,17 @@
 " Documentation: type ":help ProjectParse"
 " License:       Public domain, no restrictions whatsoever
 "
-" Version:       1.0 -- Programs can inspect g:ProjectParseVersion
+" Version:       1.1 -- Programs can inspect g:ProjectParseVersion
 
 
 " Initialization {{{
 if exists("g:ProjectParseVersion") || &cp
     finish
 endif
-let g:ProjectParseVersion = "1.0"
+let g:ProjectParseVersion = "1.1"
 " }}}
-" Helper Functions {{{
+
+" Internals {{{
 " Warning/Error {{{
 function! s:Info(message)
     echohl Normal | echomsg "[ProjectParse] ".a:message | echohl None
@@ -48,9 +49,6 @@ function! s:Trim(s)
     return strpart(a:s, beg, end-beg+1)
 endfunction
 "}}}
-"}}}
-
-" Internals {{{
 " IncreaseIndent {{{
 function! s:IncreaseIndent()
     let s:indentLevel += 1
@@ -72,18 +70,81 @@ function! s:Write(str)
     call add(s:out, str)
 endfunction
 " }}}
+" AddFile {{{
+function! s:AddFile(f,dir)
+    if !filereadable(a:dir.'/'.a:f)
+        " TODO: decide on whether to warn here or not; consider whether it's a
+        " well-formed file or a pattern
+        "call s:Warning("'".a:f."' is not unreadable")
+        return
+    endif
+    call s:Write(a:f)
+endfunction
+" }}}
+" OpenFold {{{
+function! s:OpenFold(file, name, dir)
+    let line = a:name
+    if !empty(a:dir)
+        let line .= "=".a:dir
+    else
+        let line .= "=\"\""
+    endif
+    if !empty(a:file) && !empty(a:dir)
+        let line .= " filter=\"\""
+    endif
+    if !empty(a:file)
+        let line .= " proj=".fnamemodify(a:file, ":t")
+        let line .= " mtime=".getftime(a:file)
+    endif
+    let line .= " {"
+    call s:Write(line)
+    call s:IncreaseIndent()
+endfunction
+" }}}
+" CloseFold {{{
+function! s:CloseFold()
+    call s:DecreaseIndent()
+    call s:Write("}")
+endfunction
+" }}}
+" CheckIsReadable {{{
+function! s:CheckIsReadable(prj)
+    if !filereadable(a:prj)
+        throw a:prj." is unreadable"
+    endif
+endfunction
+" }}}
+" CheckNotEmpty {{{
+function! s:CheckNotEmpty(prj, lines)
+    if empty(a:lines)
+        throw a:prj." is empty"
+    endif
+endfunction
+" }}}
+" GetProjectFilename {{{
+function! s:GetProjectFilename()
+    if exists("g:proj_filename")
+        return g:proj_filename
+    endif
+    return $HOME."/.vimprojects"
+endfunction
+" }}}
 " InsertProject {{{
 function! s:InsertProject(root_name, root_dir)
     let i = 0
     let start = -1
     let end = -1
-    let pf = $HOME."/.vimprojects"
+    let pf = s:GetProjectFilename()
     let fLines = readfile(pf)
     for line in fLines
-        if line =~ '^'.a:root_name.'='.a:root_dir.".*"
+        if line =~ '^\s*'.a:root_name.'='.a:root_dir.".*"
             let start=i
+            let indent=match(line, "[^ ]")
+            let endpattern  = '^'
+            let endpattern .= repeat(" ", indent)
+            let endpattern .= '}$'
         elseif start != -1
-            if line =~ '^}$'
+            if line =~ endpattern
                 let end = i
                 break
             endif
@@ -100,11 +161,79 @@ function! s:InsertProject(root_name, root_dir)
     call writefile(fLines, pf)
 endfunction
 " }}}
+" UpdateProjects {{{
+function! s:UpdateProjects(manual)
+    let toUpdate = []
+
+    " TODO: use a prefix with these names so that they don't conflict
+
+    let pf = s:GetProjectFilename()
+    let fLines = readfile(pf)
+    let root = ""
+    let rootdir = ""
+    for line in fLines
+        if line =~ '^\s*[\w\d]\+=.*'
+            let project = {}
+            let project["name"] = s:Trim(strpart(line, 0, stridx(line, '=')))
+            let project["indent"] = match(line, "[^ ]")
+            let fields = split(line)
+            for f in fields
+                let pair = split(f, '=')
+                if len(pair) == 2
+                    let project[pair[0]] = pair[1]
+                endif
+            endfor
+            if line =~ '^\w.*'
+                let root = project["name"]
+                let rootdir = project[root]
+            endif
+
+            if !has_key(project, "proj") | continue | endif
+
+            let project["dir"] = project[project["name"]]
+            let project["root"] = root
+            let project["rootdir"] = rootdir
+
+            if project["rootdir"] == project["dir"]
+                let project["absdir"] = project["rootdir"]
+            else
+                let project["absdir"] = project["rootdir"]."/".project["dir"]
+            endif
+
+            let file = project["absdir"]."/".project["proj"]
+
+            if !filereadable(file)
+                call s:Warning("File '".file."' not found")
+                continue
+            endif
+
+            let newMtime = str2nr(getftime(file))
+            if newMtime > str2nr(project["mtime"])
+                call add(toUpdate, project)
+            endif
+        endif
+    endfor
+
+    for p in toUpdate
+        let name = p["name"]
+        let file = p["dir"]."/".p["proj"]
+
+        if a:manual
+            echo "Updating project '".name."' (".file.")"
+        endif
+
+        let s:indentLevel = p["indent"]
+        call s:ProjectParse(file)
+    endfor
+endfunction
+" }}}
 
 " InitializeGlobals {{{
 function! s:InitializeGlobals()
     let s:out = []
-    let s:indentLevel = 0
+    if !exists("s:indentLevel")
+        let s:indentLevel = 0
+    endif
 
     let s:entries = []
     let s:relationships = {}
@@ -131,14 +260,13 @@ function! s:WriteVcFolder(sln, d)
     let proj = a:d
     let id = proj['id']
 
-    call s:Write(proj['name']." {")
-    call s:IncreaseIndent()
+    call s:OpenFold("", proj['name'], "")
 
     for i in s:relationships[id]
         let v = s:byid[i]
 
         if v['folder'] == 1
-            call s:WriteVcFolder(v)
+            call s:WriteVcFolder(a:sln, v)
         else
             call s:ParseVcProj(a:sln, v['loc'], v['name'])
         endif
@@ -153,8 +281,7 @@ function! s:WriteVcFolder(sln, d)
         endwhile
     endfor
 
-    call s:DecreaseIndent()
-    call s:Write("}")
+    call s:CloseFold()
 endfunction
 " }}}
 " ParseVcProj {{{
@@ -169,16 +296,10 @@ function! s:ParseVcProj(sln, vcproj, name)
 
     " TODO: verify file version
 
-    if !filereadable(vcproj)
-        call s:Error(vcproj." is unreadable")
-        return
-    endif
+    call s:CheckIsReadable(vcproj)
 
     let fLines = readfile(vcproj)
-    if empty(fLines)
-        call s:Error(vcproj." is empty")
-        return
-    endif
+    call s:CheckNotEmpty(vcproj)
 
     if !empty(a:name)
         let vcproj_name=a:name
@@ -189,11 +310,12 @@ function! s:ParseVcProj(sln, vcproj, name)
 
     if !empty(a:sln)
         let sln_dir=fnamemodify(a:sln, ":p:h")
-        let vcproj_dir=substitute(vcproj_dir, sln_dir."/", "", "")
+        let reldir=substitute(vcproj_dir, sln_dir."/", "", "")
+    else
+        let reldir = vcproj_dir
     endif
 
-    call s:Write(vcproj_name."=".vcproj_dir." {")
-    call s:IncreaseIndent()
+    call s:OpenFold(vcproj, vcproj_name, reldir)
 
     let state = "Unset"
     let filter = ""
@@ -219,17 +341,16 @@ function! s:ParseVcProj(sln, vcproj, name)
                 let var = substitute(line, '\s*RelativePath=\"\(.*\)\"', '\1', "")
                 let var = substitute(var, "^\.\\", "", "")
                 let var = substitute(var, "\\", "/", "g")
-                call s:Write(var)
+                call s:AddFile(var, vcproj_dir)
             endif
         endif
     endfor
 
-    call s:DecreaseIndent()
-    call s:Write("}")
+    call s:CloseFold()
 
     " TODO: integrate this more elegantly
     if empty(a:sln)
-        call s:InsertProject(vcproj_name, vcproj_dir)
+        call s:InsertProject(vcproj_name, reldir)
     endif
 
 endfunction
@@ -238,16 +359,10 @@ endfunction
 function! s:ParseVcIcProj(icproj)
     let icproj = substitute(a:icproj, "\\", "/", "g")
 
-    if !filereadable(icproj)
-        call s:Error(icproj." is unreadable")
-        return
-    endif
+    call s:CheckIsReadable(icproj)
 
     let fLines = readfile(icproj)
-    if empty(fLines)
-        call s:Error(icproj." is empty")
-        return
-    endif
+    call s:CheckNotEmpty(icproj, fLines)
 
     for line in fLines
         if line =~ "VCNestedProjectFileName=\".*\""
@@ -271,22 +386,15 @@ function! s:ParseVcSln(sln)
 
     " TODO: verify file version
 
-    if !filereadable(sln)
-        call s:Error("Unreadable")
-        return
-    endif
+    call s:CheckIsReadable(sln)
 
     let fLines = readfile(sln)
-    if empty(fLines)
-        call s:Error("empty")
-        return
-    endif
+    call s:CheckNotEmpty(sln, fLines)
 
     let sln_dir=fnamemodify(sln, ":p:h")
     let sln_name=fnamemodify(sln, ":t:r")
 
-    call s:Write(sln_name."=".sln_dir." filter=\"\" {")
-    call s:IncreaseIndent()
+    call s:OpenFold(sln, sln_name, sln_dir)
 
     let state = "Unset"
     let filter = ""
@@ -355,8 +463,7 @@ function! s:ParseVcSln(sln)
 
     endwhile
 
-    call s:DecreaseIndent()
-    call s:Write("}")
+    call s:CloseFold()
 
     call s:InsertProject(sln_name, sln_dir)
 
@@ -376,16 +483,10 @@ function! s:ParseCbProj(sln, cbproj, name)
 
     " TODO: verify file version
 
-    if !filereadable(cbproj)
-        call s:Error(cbproj." is unreadable")
-        return
-    endif
+    call s:CheckIsReadable(cbproj)
 
     let fLines = readfile(cbproj)
-    if empty(fLines)
-        call s:Error(cbproj." is empty")
-        return
-    endif
+    call s:CheckNotEmpty(cbproj, fLines)
 
     if !empty(a:name)
         let cbproj_name=a:name
@@ -399,8 +500,7 @@ function! s:ParseCbProj(sln, cbproj, name)
         let cbproj_dir=substitute(cbproj_dir, sln_dir."/", "", "")
     endif
 
-    call s:Write(cbproj_name."=".cbproj_dir." {")
-    call s:IncreaseIndent()
+    call s:OpenFold(cbproj, cbproj_name, cbproj_dir)
 
     let state = "Unset"
     let filter = ""
@@ -409,12 +509,11 @@ function! s:ParseCbProj(sln, cbproj, name)
         if line =~ '<Unit filename=\"[^"]\+\".*'
             let var = substitute(s:Trim(line), '<Unit filename=\"\([^"]\+\)\".*', '\1', "")
             let var = substitute(var, "^\./", "", "")
-            call s:Write(var)
+            call s:AddFile(var, cbproj_dir)
         endif
     endfor
 
-    call s:DecreaseIndent()
-    call s:Write("}")
+    call s:CloseFold()
 
     " TODO: integrate this more elegantly
     if empty(a:sln)
@@ -435,22 +534,15 @@ function! s:ParseCbWorkspace(sln)
 
     " TODO: verify file version
 
-    if !filereadable(sln)
-        call s:Error("Unreadable")
-        return
-    endif
+    call s:CheckIsReadable(sln)
 
     let fLines = readfile(sln)
-    if empty(fLines)
-        call s:Error("empty")
-        return
-    endif
+    call s:CheckNotEmpty(sln, fLines)
 
     let sln_dir=fnamemodify(sln, ":p:h")
     let sln_name=fnamemodify(sln, ":t:r")
 
-    call s:Write(sln_name."=".sln_dir." filter=\"\" {")
-    call s:IncreaseIndent()
+    call s:OpenFold(sln, sln_name, sln_dir)
 
     let state = "Unset"
     let filter = ""
@@ -464,8 +556,7 @@ function! s:ParseCbWorkspace(sln)
         endif
     endfor
 
-    call s:DecreaseIndent()
-    call s:Write("}")
+    call s:CloseFold()
 
     call s:InsertProject(sln_name, sln_dir)
 
@@ -474,7 +565,7 @@ endfunction
 "}}}
 " Automake {{{
 " ParseAmMakefile {{{
-function! s:ParseAmMakefile(am, first)
+function! s:ParseAmMakefile(am, parentdir)
 
     let am = substitute(a:am, "\\", "/", "g")
 
@@ -483,16 +574,10 @@ function! s:ParseAmMakefile(am, first)
         return
     endif
 
-    if !filereadable(am)
-        call s:Error(am." is unreadable")
-        return
-    endif
+    call s:CheckIsReadable(am)
 
     let fLines = readfile(am)
-    if empty(fLines)
-        call s:Error(am." is empty")
-        return
-    endif
+    call s:CheckNotEmpty(am, fLines)
 
     let am_dir=fnamemodify(am, ":p:h")
     let am_name=""
@@ -502,28 +587,41 @@ function! s:ParseAmMakefile(am, first)
 
     let state = "Unset"
 
-    for line in fLines
+    let lnum = 0
+    let numLines = len(fLines)
+    while lnum < numLines
+        let line = fLines[lnum]
         let line = s:Trim(line)
         if state == "Unset"
-            if line =~ 'bin_PROGRAMS = .*'
-                let am_name = substitute(line, 'bin_PROGRAMS = \(.*\)', '\1', "")
-            elseif line =~ 'SUBDIRS = .*'
-                let subdirs = split(substitute(line, 'SUBDIRS = \(.*\)', '\1', ""), " ")
-            elseif line =~ '.*_SOURCES'
+            if line =~ "\\s*bin_PROGRAMS\\s*=\\s*.*"
+                let am_name = s:Trim(strpart(line, stridx(line, "=")+1))
+            elseif line =~ "\\s*SUBDIRS\\s*=\\s*.*"
+                let subdirs = split(substitute(line, "\\s*SUBDIRS\\s*=\\s*\(.*\)", '\1', ""), " ")
+            elseif line =~ "^\\s*".am_name."_SOURCES\\s*=\\s*.*"
                 let state = "Files"
+
+                " Skip incrementing the line counter
+                continue
             endif
         elseif state == "Files"
+
+            if line =~ "^\\s*".am_name."_SOURCES\\s*=\\s*.*"
+                let line = strpart(line, stridx(line, "=")+1)
+            endif
+
             if line !~ '.*\\$'
                 let state = "Unset"
             endif
-            let files = substitute(line, ' \?\\$', '', "")
+
+            let files = substitute(line, '\\$', '', "")
             let files = s:Trim(files)
             let filelist = split(files, " ")
             for f in filelist
                 call add(sources, f)
             endfor
         endif
-    endfor
+        let lnum += 1
+    endwhile
 
     if empty(am_name)
         let am_name=fnamemodify(am_dir, ":t")
@@ -531,32 +629,33 @@ function! s:ParseAmMakefile(am, first)
 
     let subcount = 0
     for subdir in subdirs
-        let subam = subdir.'/Makefile.am'
+        let subdir = s:Trim(subdir)
+        let subam = am_dir.'/'.subdir.'/Makefile.am'
         if filereadable(subam)
             let subcount += 1
         endif
     endfor
-    let passthrough = empty(sources) && (subcount==1) && (a:first==1)
+    let passthrough = empty(sources) && (subcount==1) && empty(a:parentdir)
+    let reldir = empty(a:parentdir) ? am_dir : fnamemodify(am_dir, ":t")
 
     if !passthrough
-        call s:Write(am_name."=".am_dir." {")
-        call s:IncreaseIndent()
+        call s:OpenFold(am, am_name, reldir)
         for s in sources
-            call s:Write(s)
+            call s:AddFile(s, am_dir)
         endfor
     endif
     for subdir in subdirs
-        let subam = subdir.'/Makefile.am'
+        let subdir = s:Trim(subdir)
+        let subam = am_dir.'/'.subdir.'/Makefile.am'
         if filereadable(subam)
-            call s:ParseAmMakefile(subam, passthrough)
+            call s:ParseAmMakefile(subam, passthrough ? "" : subdir)
         endif
     endfor
     if !passthrough
-        call s:DecreaseIndent()
-        call s:Write("}")
+        call s:CloseFold()
     endif
 
-    if a:first && !passthrough
+    if empty(a:parentdir) && !passthrough
         call s:InsertProject(am_name, am_dir)
     endif
 
@@ -574,16 +673,10 @@ function! s:ParseCmakelist(cmf, first)
         return
     endif
 
-    if !filereadable(cmf)
-        call s:Error(cmf." is unreadable")
-        return
-    endif
+    call s:CheckIsReadable(cmf)
 
     let fLines = readfile(cmf)
-    if empty(fLines)
-        call s:Error(cmf." is empty")
-        return
-    endif
+    call s:CheckNotEmpty(cmf, fLines)
 
     let cmf_dir=fnamemodify(cmf, ":p:h")
     let cmf_name=""
@@ -593,29 +686,40 @@ function! s:ParseCmakelist(cmf, first)
 
     let state = "Unset"
 
-    for line in fLines
+    let lnum = 0
+    let numLines = len(fLines)
+    while lnum < numLines
+        let line = fLines[lnum]
         let line = s:Trim(line)
         if state == "Unset"
-            if line =~ 'project(.*)'
-                let cmf_name = substitute(line, 'project\(.*\)', '\1', "")
-            elseif line =~ 'add_subdirectory(.*)'
-                let subdir = substitute(line, 'add_subdirectory\(.*\)', '\1', "")
+            if line =~# 'project(.*)'
+                let cmf_name = substitute(line, 'project(\(.*\))', '\1', "")
+            elseif line =~# 'add_subdirectory(.*)'
+                let subdir = substitute(line, 'add_subdirectory(\(.*\))', '\1', "")
                 call add(subdirs, subdir)
-            elseif line =~ 'file(.*)'
+            elseif line =~# 'source_group(.*'
                 let state = "Files"
+
+                " Skip incrementing the line counter
+                continue
             endif
         elseif state == "Files"
-            if line !~ '.*\\$'
-                let state = "Unset"
+            if line =~# 'source_group(.*'
+                let line = strpart(line, stridx(line, "FILES")+strlen("FILES"))
             endif
-            let files = substitute(line, ' \?\\$', '', "")
-            let files = s:Trim(files)
-            let filelist = split(files, " ")
+
+            if line =~# ")$"
+                let state = "Unset"
+                let line = strpart(line, 0, strlen(line)-1)
+            endif
+
+            let filelist = split(line, " ")
             for f in filelist
                 call add(sources, f)
             endfor
         endif
-    endfor
+        let lnum += 1
+    endwhile
 
     if empty(cmf_name)
         let cmf_name=fnamemodify(cmf_dir, ":t")
@@ -623,7 +727,7 @@ function! s:ParseCmakelist(cmf, first)
 
     let subcount = 0
     for subdir in subdirs
-        let subcmf = subdir.'/CMakeLists.txt'
+        let subcmf = cmf_dir.'/'.subdir.'/CMakeLists.txt'
         if filereadable(subcmf)
             let subcount += 1
         endif
@@ -631,21 +735,19 @@ function! s:ParseCmakelist(cmf, first)
     let passthrough = empty(sources) && (subcount==1) && (a:first==1)
 
     if !passthrough
-        call s:Write(cmf_name."=".cmf_dir." {")
-        call s:IncreaseIndent()
+        call s:OpenFold(cmf, cmf_name, cmf_dir)
         for s in sources
-            call s:Write(s)
+            call s:AddFile(s, cmf_dir)
         endfor
     endif
     for subdir in subdirs
-        let subcmf = subdir.'/CMakeLists.txt'
+        let subcmf = cmf_dir.'/'.subdir.'/CMakeLists.txt'
         if filereadable(subcmf)
             call s:ParseCmakelist(subcmf, passthrough)
         endif
     endfor
     if !passthrough
-        call s:DecreaseIndent()
-        call s:Write("}")
+        call s:CloseFold()
     endif
 
     if a:first && !passthrough
@@ -655,26 +757,167 @@ function! s:ParseCmakelist(cmf, first)
 endfunction
 " }}}
 "}}}
+" MPLAB {{{
+" ParseMplab {{{
+function! s:ParseMplab(mcp)
+
+    let mcp = substitute(a:mcp, "\\", "/", "g")
+
+    if mcp !~ ".*\.mcp"
+        call s:Error(mcp." is not an automake project file")
+        return
+    endif
+
+    call s:CheckIsReadable(mcp)
+
+    let fLines = readfile(mcp)
+    call s:CheckNotEmpty(mcp, fLines)
+
+    let mcp_dir=fnamemodify(mcp, ":p:h")
+    let mcp_name=fnamemodify(mcp, ":t:r")
+
+    let sources = []
+
+    let state = "Unset"
+
+    let lnum = 0
+    let numLines = len(fLines)
+    while lnum < numLines
+        let line = fLines[lnum]
+        let line = s:Trim(line)
+        if state == "Unset"
+            if line =~ '\[FILE_INFO\]'
+                let state = "Files"
+            endif
+        elseif state == "Files"
+
+            if line =~ '\[.*\]'
+                let state = "Unset"
+                continue
+            endif
+
+            let file = substitute(line, 'file_\d\+=', '', "")
+            call add(sources, file)
+        endif
+        let lnum += 1
+    endwhile
+
+    call s:OpenFold(mcp, mcp_name, mcp_dir)
+    for s in sources
+        call s:AddFile(s, mcp_dir)
+    endfor
+    call s:CloseFold()
+
+    call s:InsertProject(mcp_name, mcp_dir)
+
+endfunction
+" }}}
+"}}}
+" CodeLite {{{
+" ParseCodeLite {{{
+function! s:ParseCodeLite(cl_prj)
+
+    let cl_prj = substitute(a:cl_prj, "\\", "/", "g")
+
+    if cl_prj !~ ".*\.project"
+        call s:Error(cl_prj." is not a codelite project file")
+        return
+    endif
+
+    call s:CheckIsReadable(cl_prj)
+
+    let fLines = readfile(cl_prj)
+    call s:CheckNotEmpty(cl_prj, fLines)
+
+    let cl_dir=fnamemodify(cl_prj, ":p:h")
+    let cl_name=fnamemodify(cl_prj, ":t:r")
+
+    let sourcemap = {}
+
+    let state = "Unset"
+    let folder = ""
+
+    let lnum = 0
+    let numLines = len(fLines)
+    while lnum < numLines
+        let line = fLines[lnum]
+        let line = s:Trim(line)
+        if state == "Unset"
+            if line =~ '<CodeLite_Project Name'
+                let pairs = split(line)
+                for p in pairs
+                    if p =~ "Name.*"
+                        let cl_name = split(p, "=")[1]
+                        let cl_name=cl_name[1:strlen(cl_name)-2]
+                    endif
+                endfor
+            elseif line =~ '<VirtualDirectory'
+                let state = "Files"
+                let folder = substitute(line, '<VirtualDirectory Name=\"\([^"]\+\)">', '\1', "")
+                if !has_key(sourcemap, folder)
+                    let sourcemap[folder] = []
+                endif
+            endif
+        elseif state == "Files"
+
+            if line =~ '</VirtualDirectory.*'
+                let state = "Unset"
+                let folder = ""
+                continue
+            endif
+
+            let file = substitute(line, '<File Name=\"\([^"]\+\)"/>', '\1', "")
+            call add(sourcemap[folder], file)
+        endif
+        let lnum += 1
+    endwhile
+
+    call s:OpenFold(cl_prj, cl_name, cl_dir)
+    for k in keys(sourcemap)
+        call s:OpenFold("", k, "")
+        let sources = sourcemap[k]
+        for s in sources
+            call s:AddFile(s, cl_dir)
+        endfor
+        call s:CloseFold()
+    endfor
+    call s:CloseFold()
+
+    call s:InsertProject(cl_name, cl_dir)
+
+endfunction
+" }}}
+"}}}
 
 " ProjectParse {{{
 function! s:ProjectParse(f)
     let f = a:f
     call s:InitializeGlobals()
-    if     f =~ ".*\.sln"
-        call s:ParseVcSln(f)
-    elseif f =~ ".*\.vcproj"
-        call s:ParseVcProj("", f, "")
-    elseif f =~ ".*\.workspace"
-        call s:ParseCbWorkspace(f)
-    elseif f =~ ".*\.cbp"
-        call s:ParseCbProj("", f, "")
-    elseif f =~ ".*Makefile\.am"
-        call s:ParseAmMakefile(f, 1)
-    "elseif f =~ ".*CMakeLists\.txt"
-        "call s:ParseCmakelist(f, 1)
-    else
-        call s:Error("This filetype is not yet supported")
-    endif
+    try
+        if     f =~ ".*\.sln"
+            call s:ParseVcSln(f)
+        elseif f =~ ".*\.vcproj"
+            call s:ParseVcProj("", f, "")
+        elseif f =~ ".*\.workspace"
+            call s:ParseCbWorkspace(f)
+        elseif f =~ ".*\.cbp"
+            call s:ParseCbProj("", f, "")
+        elseif f =~ ".*Makefile\.am"
+            call s:ParseAmMakefile(f, "")
+        " TODO: implement CMake parsing (very difficult)
+        "elseif f =~ ".*CMakeLists\.txt"
+            "call s:ParseCmakelist(f, 1)
+        elseif f =~ ".*\.mcp"
+            call s:ParseMplab(f)
+        " TODO: this will likely need some disambiguation in the future
+        elseif f =~ ".*\.project"
+            call s:ParseCodeLite(f)
+        else
+            call s:Error("This filetype is not yet supported")
+        endif
+    catch /.*/
+        call s:Error(v:exception)
+    endtry
     call s:ClearGlobals()
 endfunction
 " }}}
@@ -682,5 +925,13 @@ endfunction
 
 " Commands {{{
 command! -complete=file -nargs=1 ProjectParse :call s:ProjectParse(<f-args>)
+command! -nargs=0 ProjectUpdate :call s:UpdateProjects(1)
+"}}}
+
+" AutoUpdate {{{
+" Upon sourcing this file, update all projects that are out of date
+if !exists("g:ProjectParseNoAutoUpdate")
+    call s:UpdateProjects(0)
+endif
 "}}}
 
