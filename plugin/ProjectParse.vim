@@ -299,7 +299,7 @@ function! s:ParseVcProj(sln, vcproj, name)
     call s:CheckIsReadable(vcproj)
 
     let fLines = readfile(vcproj)
-    call s:CheckNotEmpty(vcproj)
+    call s:CheckNotEmpty(vcproj, fLines)
 
     if !empty(a:name)
         let vcproj_name=a:name

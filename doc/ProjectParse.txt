@@ -18,7 +18,7 @@ Contribute: Please report any bugs or suggestions      |ProjectParse_Bugs|
 ==============================================================================
 
 
-             1. Motivation.................|ProjectParse_Motivation|
+             1. Introduction...............|ProjectParse_Introduction|
              2. Commands...................|ProjectParse_Commands|
              3. Options....................|ProjectParse_Options|
              4. Future.....................|ProjectParse_Future|
@@ -28,18 +28,33 @@ Contribute: Please report any bugs or suggestions      |ProjectParse_Bugs|
 
 
 ==============================================================================
-  Motivation                                         *ProjectParse_Motivation*
+  Introduction                                      *ProjectParse_Introduction*
 ==============================================================================
+
+-------
+Summary
+-------
 
 ProjectParse is a plugin that analyzes several common project formats and
 creates entries for them for use with  Vim's `project` plugin.  ProjectParse
-currently supports the following project types:
+will also watch the specified project and automatically update it's entry when
+the project changes.  ProjectParse currently supports the following project
+types:
 
     * Microsoft Visual Studio Projects and Solutions
     * Code::Blocks Projects and Workspaces
     * Automake Makefiles
     * MPLAB Projects
     * CodeLite Projects
+    * (More to come!)
+
+By simply running the :ProjectParse command on a relevant file, a file listing
+will be added to a user's configuration for the `project` plugin and will be
+kept up to date.
+
+----------
+Motivation
+----------
 
 One of the most popular plugins available for Vim, the `project` plugin
 provides a mechanism for creating lists of files that makeup a project.
@@ -66,11 +81,6 @@ form of a project for a well-known software tool like Microsoft Visual Studio.
 This is where ProjectParse enters.  ProjectParse is capable of analyzing
 project files for several popular software tools to automatically (and
 quickly) create a project for the `project` plugin.
-
-By simply running the :ProjectParse command on a relevant file, a file listing
-will be added to a user's configuration for the `project` plugin and he or she
-can need not worry about whether any files have been missed (or added in
-error).
 
 I hope you find ProjectParse useful.  In the future I would like to see other
 project types supported and any contributions towards this goal are very much
